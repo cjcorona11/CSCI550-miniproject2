@@ -101,14 +101,30 @@ md.pattern(data, rotate.names=TRUE)
 ```
 
 ```{r}
-# drop pool.qc, misc.feature, alley, fence, fireplace.qu, and lot.frontage because most of that data is missing
+# drop pool.qu, misc.feature, alley, fence, fireplace.qu, and lot.frontage because most of that data is missing
 data <- data[,-c(5,8,58,73,74,75)]
 md.pattern(data, rotate.names=TRUE)
+```
 
-which(is.na(data$Bsmt.Full.Bath))
-which(is.na(data$Garage.Area))
-which(is.na(data$Electrical))
+```{r}
+# remove single observations with missing data
+data <- data[-c(which(is.na(data$Bsmt.Full.Bath)), which(is.na(data$Garage.Area)), which(is.na(data$Electrical))),]
 
+md.pattern(data, rotate.names=TRUE)
+```
+
+```{r}
+# remove single observations with missing data
+data <- data[-c(1356,67,1794,2776,445,2820),]
+
+md.pattern(data, rotate.names=TRUE)
+```
+
+```{r}
+data[which(is.na(data$Mas.Vnr.Type)),25] <- "None"
+data[which(is.na(data$Mas.Vnr.Area)),26] <- 0
+
+md.pattern(data, rotate.names=TRUE)
 ```
 
 
