@@ -1,0 +1,310 @@
+---
+title: "Mini Project 2: Predicting Housing Prices in Ames, Iowa"
+author: "Chris Corona, Farshina, Nolan Walker"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Abstract
+In this mini-project, our task is to fit and evaluate several different types of models for classification. The data set is from a telephone service provider that tracked 20 metrics - 5 categorical and 15 quantitative - to try to predict whether or not the customer would churn. There are 3333 observations in this unbalanced data set with 2850 `FALSE`  responses and 483 `TRUE` responses. After fitting various models, we compared the precision, recall, and F1 scores to determine which model has the best performance.
+
+# 1 Executive Summary
+Our analysis of the telecom customer data set achieved great results. We are able to predict with 89\% overall accuracy whether or not a customer will churn. When our model predicts a churn, it predicts correctly 58\% of the time. And of all the true churns, we are predicting 71\% of them. These are decent numbers for such an unbalanced data set. We discovered that customers who churn have the following properties. They tend to have international plans, they tend to not have voice mail plans and have fewer voicemail messages, they tend to have slightly more day/evening/night/international minutes, and they tend to make more customer service calls. We also found that the customer’s state, area code, account length, and number of calls were not related to churning.
+
+# 2 Data Preprocessing
+The data set is from a telephone service provider that tracked 20 metrics - 5 categorical and 15 quantitative - to try to predict whether or not the customer would churn. There are 3333 observations in this unbalanced data set with 2850 `FALSE`  responses and 483 `TRUE` responses. As a preprocessing step, we split our data into train and test sets. We split at 70\% to 30\% so there are 2324 training and 1009 testing observations. Of the training observations, there are 1982 `FALSE` responses and 342 `TRUE` responses.  Of the testing observations, there are 868 `FALSE` responses and 141 `TRUE` responses. This seems like reasonable unbalance compared to the original data set.
+
+```{r Train Test Split, warning=FALSE, message=FALSE}
+# read in the data set
+library(tidyverse)
+data <- read_csv("ames.csv")
+
+# split data into train and test sets
+set.seed(5544)
+split_index <- sample(c(TRUE,FALSE), nrow(data), replace=TRUE, prob=c(0.7, 0.3))
+train <- data[split_index,]
+test <- data[!split_index,]
+```
+
+# 3 Exploratory Analysis
+In our Exploratory Data Analysis (EDA) we rigorously reviewed the data for any issues and reduced the number of predictors from 20 down to just 9. We first checked for any missing data; there is none. Then we checked the balance of the data set; it is very unbalanced with 2850 `FALSE` responses and 483 `TRUE` responses. We looked at the summary statistics to find any outliers; it appears that there are no extreme observations. The next task was to attempt to reduce the number of predictors by dropping any that are uncorrelated with the response or are strongly correlated with another predictor. We discovered that the `total_x_minutes` is strongly correlated with `total_x_charge` so we could drop one of them. We then dropped all the predictors that are uncorrelated with the response: `phone_number`, `state`, `area_code`, `account_length`, and `x_calls`.
+
+```{r EDA, message=FALSE, warning=FALSE}
+# take a peak at the data
+head(data)
+
+# immediately drop order and pid as predictors
+data <- data[,-c(1,2)]
+
+# check structure of data
+str(data)
+
+# change strings into factors
+data$MS.Zoning <- factor(data$MS.Zoning)
+data$Street <- factor(data$Street)
+data$Alley <- factor(data$Alley)
+data$Lot.Shape <- factor(data$Lot.Shape)
+data$Land.Contour <- factor(data$Land.Contour)
+data$Utilities <- factor(data$Utilities)
+data$Lot.Config <- factor(data$Lot.Config)
+data$Land.Slope <- factor(data$Land.Slope)
+data$Neighborhood <- factor(data$Neighborhood)
+data$Condition.1 <- factor(data$Condition.1)
+data$Condition.2 <- factor(data$Condition.2)
+data$Bldg.Type <- factor(data$Bldg.Type)
+data$House.Style <- factor(data$House.Style)
+data$Roof.Style <- factor(data$Roof.Style)
+data$Roof.Matl <- factor(data$Roof.Matl)
+data$Exterior.1st <- factor(data$Exterior.1st)
+data$Exterior.2nd <- factor(data$Exterior.2nd)
+data$Mas.Vnr.Type <- factor(data$Mas.Vnr.Type)
+data$Exter.Qual <- factor(data$Exter.Qual)
+data$Exter.Cond <- factor(data$Exter.Cond)
+data$Foundation <- factor(data$Foundation)
+data$Bsmt.Qual <- factor(data$Bsmt.Qual)
+data$Bsmt.Cond <- factor(data$Bsmt.Cond)
+data$Bsmt.Exposure <- factor(data$Bsmt.Exposure)
+data$BsmtFin.Type.1 <- factor(data$BsmtFin.Type.1)
+data$BsmtFin.Type.2 <- factor(data$BsmtFin.Type.2)
+data$Heating <- factor(data$Heating)
+data$Heating.QC <- factor(data$Heating.QC)
+data$Central.Air <- factor(data$Central.Air)
+data$Electrical <- factor(data$Electrical)
+data$Kitchen.Qual <- factor(data$Kitchen.Qual)
+data$Functional <- factor(data$Functional)
+data$Fireplace.Qu <- factor(data$Fireplace.Qu)
+data$Garage.Type <- factor(data$Garage.Type)
+data$Garage.Finish <- factor(data$Garage.Finish)
+data$Garage.Qual <- factor(data$Garage.Qual)
+data$Garage.Cond <- factor(data$Garage.Cond)
+data$Paved.Drive <- factor(data$Paved.Drive)
+data$Pool.QC <- factor(data$Pool.QC)
+data$Fence <- factor(data$Fence)
+data$Misc.Feature <- factor(data$Misc.Feature)
+data$Sale.Type <- factor(data$Sale.Type)
+data$Sale.Condition <- factor(data$Sale.Condition)
+```
+
+
+```{r}
+# recheck structure of data to make sure factoring worked
+str(data)
+```
+
+```{r}
+# check for missing data - NO MISSING DATA!!
+library(mice)
+md.pattern(data, rotate.names=TRUE)
+```
+
+```{r}
+# drop pool.qc, misc.feature, alley, fence, fireplace.qu, and lot.frontage because most of that data is missing
+data <- data[,-c(5,8,58,73,74,75)]
+md.pattern(data, rotate.names=TRUE)
+
+which(is.na(data$Bsmt.Full.Bath))
+which(is.na(data$Garage.Area))
+which(is.na(data$Electrical))
+
+```
+
+
+```{r}
+# check for balance - NOT BALANCED, FALSE=2850, TRUE=483
+library(ggplot2)
+ggplot(train, aes(x=churn)) +
+  geom_bar() +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.2) +
+  ggtitle("Number of samples for each response category")
+
+# summary statistics to check for any strangeness in the data - NO ISSUES OBSERVED
+summary(train)
+
+# let's look at the few categorical predictors
+library(GGally)
+ggpairs(train[,c(3,4,5,20)], upper = list(continuous = GGally::wrap(ggally_cor,
+                                               size = 3,
+                                               color ="black",
+                                               stars = F)))
+# it seems state actually has some predictive capabilities (surprisingly)
+# but only a few states are meaningful - it's not worth it to include all 51 states
+ggplot(train, aes(x=state, fill=churn, color=churn)) +
+  geom_bar(position="dodge") +
+  scale_x_discrete(guide = guide_axis(angle = 90))
+lm.state <- glm(churn ~ state, data=train, family="binomial")
+summary(lm.state)
+lm.areacode <- glm(churn ~ `area code`, data=train, family="binomial")
+summary(lm.areacode)
+# drop state and area code
+train <- train[,c(-1,-3)]
+
+# now let's look for correlation between quantitative predictors/response
+cor(train[,c(1,4:18)])
+# drop uncorrelated categories - account length, day calls, eve calls, night calls
+# drop one of the highly correlated pairs - day charge, eve charge, night charge
+train <- train[,c(-1,-6,-7,-9,-10,-12,-13,-16)]
+
+# final check of structure - 10 predictors, 1 response
+str(train)
+
+# plot the remaining quantitative variables' pairwise correlation
+ggpairs(train[,3:10], upper = list(continuous = GGally::wrap(ggally_cor,
+                                                            size = 3,
+                                                            color ="black",
+                                                            stars = F)))
+```
+
+# 4 Model development and performance evaluation
+# Logistic Regression
+We fit three logistic regression models with different predictors: all 9 predictors, top 6 most correlated predictors, and top 3 most correlated predictors. The first model uses all 9 predictors and all 9 appear to be good predictors since the p-values of their coefficients are all below the 0.05 alpha cutoff. Using a prediction threshold of 0.5, this model achieves a precision 0.56, recall 0.19, and F1 score 0.29. We will consider these numbers as our baseline for the remainder of the study. Looking at the confusion matrix, we noticed that this model is only predicting a total of 58 `TRUE` responses. This is a very small number for our test set of 1009 observations. Since the data set is unbalanced, we adjusted the prediction threshold such that we are predicting more  `TRUE` responses. Empirically we found 0.35 to have the best results, now with 93 predicted `TRUE` responses. This threshold achieves better precision, recall, and F1 score compared to the baseline. We did not use accuracy as a metric to evaluate model performance because the data set is unbalanced. But sometimes using all the predictors is not the best model, and we decided to investigate this. For the second model, we dropped the predictors with the least significant p-values: `number_vmail_messages`, `total_night_minutes`, and `total_intl_calls`. It turns out this second model performed worse. And we investigated this idea further with the third model using only the 3 predictors with the strongest effects: `international_plan`, `voice_mail_plan`, and `customer_service_calls`. This model performed the worst of the three.
+
+```{r Logistic Regression}
+# model 1: use all the predictors
+lm1 <- glm(churn ~ ., data=train, family="binomial")
+summary(lm1)
+lm1.prob <- predict(lm1, newdata=test, type="response")
+lm1.pred <- rep(FALSE, nrow(test))
+lm1.pred[lm1.prob > 0.5] <- TRUE
+table(lm1.pred, test$churn)
+cat("\n")
+
+# a function to compute the accuracy, precision, recall, and F1 scores of a model
+score <- function(prediction, actual) {
+  accuracy <- mean(prediction == actual)
+  cat("Accuracy: ", accuracy, "\n")
+  precision <- sum(prediction == TRUE & prediction == actual)/sum(prediction == TRUE)
+  cat("Precision: ", precision, "\n")
+  recall <- sum(prediction == TRUE & prediction == actual)/sum(actual == TRUE)
+  cat("Recall: ", recall, "\n")
+  f1 <- 2*precision*recall/(precision+recall)
+  cat("F1: ", f1, "\n")
+  out <- rep(0,4)
+  out[1:4] = c(accuracy, precision, recall, f1)
+  return(out)
+}
+
+lm1.scores50 <- score(lm1.pred, test$churn)
+
+# adjusting the response threshold to 0.35
+lm1.pred <- rep(FALSE, nrow(test))
+lm1.pred[lm1.prob > 0.35] <- TRUE
+table(lm1.pred, test$churn)
+cat("\n")
+lm1.scores35 <- score(lm1.pred, test$churn)
+```
+
+```{r}
+# model 2: remove the least significant predictors
+lm2 <- glm(churn ~ . -`number vmail messages` -`total night minutes` -`total intl calls`, data=train, family="binomial")
+#summary(lm2)
+lm2.prob <- predict(lm2, newdata=test, type="response")
+lm2.pred <- rep(FALSE, nrow(test))
+lm2.pred[lm2.prob > 0.35] <- TRUE
+table(lm2.pred, test$churn)
+cat("\n")
+lm2.scores35 <- score(lm2.pred, test$churn)
+
+# model 3: only use the most significant predictors
+lm3 <- glm(churn ~ `international plan` + `voice mail plan` + `customer service calls`, data=train, family="binomial")
+#summary(lm3)
+lm3.prob <- predict(lm3, newdata=test, type="response")
+lm3.pred <- rep(FALSE, nrow(test))
+lm3.pred[lm3.prob > 0.35] <- TRUE
+table(lm3.pred, test$churn)
+cat("\n")
+lm3.scores35 <- score(lm3.pred, test$churn)
+```
+
+# LDA
+The next class of model uses Linear Discriminant Analysis (LDA). This is a generative model that tries to determine the probability that a response is of class k, by computing its density function fk(x). To do this, it assumes that the density function is normal and each class has a shared covariance matrix $\Sigma$. We fit the LDA model using all the predictors since this was the best logistic regression model. We also compared the prediction thresholds at 0.5 and 0.35 (this is 1 - 0.65 from the logistic regression model and achieves the same effective threshold due to the semantics of the built-in R functions). The LDA model with the adjusted prediction threshold performed better than the 0.5 threshold. But LDA performed slightly worse than logistic regression.
+
+```{r LDA}
+library(MASS)
+lda.fit <- lda(churn ~ ., data=train)
+#lda.fit
+#plot(lda.fit)
+
+lda.prob <- predict(lda.fit, newdata=test)
+lda.pred <- rep(TRUE, nrow(test))
+lda.pred[lda.prob$posterior[,1] > 0.5] <- FALSE
+table(lda.pred, test$churn)
+cat("\n")
+lda.scores50 <- score(lda.pred, test$churn)
+
+# adjusting the response threshold to 0.65
+lda.pred <- rep(TRUE, nrow(test))
+lda.pred[lda.prob$posterior[,1] > 0.65] <- FALSE
+table(lda.pred, test$churn)
+cat("\n")
+lda.scores65 <- score(lda.pred, test$churn)
+```
+
+# QDA
+A more complex version of LDA is called Quadratic Discriminant Analysis (QDA). This uses the same approach as LDA, except we add more flexibility by allowing the covariance matrix $\Sigma$ to differ among classes. Again we used all the predictors for this model, and again we compared the prediction thresholds at 0.5 and 0.35. We found the adjusted threshold performed better than the 0.5 threshold. QDA performed much better than logistic regression and LDA. The precision is only slightly better, but the recall (and therefore F1 score) is significantly better.
+
+```{r QDA}
+qda.fit <- qda(churn ~ ., data=train)
+#qda.fit
+
+qda.prob <- predict(qda.fit, newdata=test)
+qda.pred <- rep(TRUE, nrow(test))
+qda.pred[qda.prob$posterior[,1] > 0.5] <- FALSE
+table(qda.pred, test$churn)
+cat("\n")
+qda.scores50 <- score(qda.pred, test$churn)
+
+# adjusting the response threshold to 0.65
+qda.pred <- rep(TRUE, nrow(test))
+qda.pred[qda.prob$posterior[,1] > 0.65] <- FALSE
+table(qda.pred, test$churn)
+cat("\n")
+qda.scores65 <- score(qda.pred, test$churn)
+```
+
+# Naive Bayes
+The last model we fit is Naive Bayes (NB). This is another generative model, but it takes a different approach to simplifying the math of estimating distributional probabilities. Instead of assuming these class distributions belong to the normal family, it instead assumes that the predictors are independent of each other within each class. Again we used all the predictors for this model, but this time we did not adjust the threshold because Naive Bayes does not allow this - it simply predicts the class with the higher probability (essentially the threshold is 0.5). This model has the highest precision of all the models, but its recall (and therefore F1 score) is similar to logistic regression and LDA. 
+
+```{r Naive Bayes,warning=FALSE}
+library(e1071)
+nb.fit <- naiveBayes(churn ~ ., data=train)
+#nb.fit
+
+nb.pred <- predict(nb.fit, newdata=test)
+table(nb.pred, test$churn)
+cat("\n")
+nb.scores <- score(nb.pred, test$churn)
+```
+
+```{r Scores}
+scores <- data.frame(score=c(lm1.scores35, lm2.scores35, lm3.scores35, lda.scores65, qda.scores65, nb.scores),
+                      type=c(rep(c("accuracy","precision","recall","f1"),6)),
+                      model=c(rep(c("lm1", "lm2", "lm3", "lda", "qda", "nb"),each=4)))
+
+scores$model <- factor(scores$model, levels=c("lm1", "lm2", "lm3", "lda", "qda", "nb"))
+
+ggplot(scores, aes(x=factor(type), y=score, group=model, color=model, shape=model)) +
+  geom_line() +
+  geom_point() +
+  scale_x_discrete(limits=c("accuracy","precision","recall","f1")) +
+  xlab("score type") +
+  ggtitle("Model comparison") +
+  theme_minimal()
+```
+
+# 5 Conclusion
+The best model from our analysis is the QDA fit. The challenge with this data set is its imbalance. With so many `FALSE` responses, it is difficult to accurately predict `TRUE` responses. And the naive case of always predicting `FALSE` has a high accuracy of 86\% (though it has 0\% precision and recall). The QDA model predicts true 171 times and does so correctly on 100 of those. It is only missing 41 `TRUE` responses. This is much better than the naive case of always predicting `FALSE` and better than any of the other models in this analysis. It achieves 89\% accuracy, 58\% precision, 71\% recall, and 64\% F1 score. We can also determine the effect of the predictors. Having international plans, voice mail plans, fewer voicemail messages, slightly more day/evening/night/international minutes, and more customer service calls are all associated with churning. State, area code, account length, and number of calls were not related to churning.
+
+```{r The Best Model Interpretation}
+# interpret output of best model (QDA)
+qda.fit
+cat("\n")
+table(qda.pred, test$churn)
+cat("\n")
+results <- score(qda.pred, test$churn)
+```
+
+# References
+Gareth James, Daniela Witten, Trevor Hastie, Robert Tibshirani. An Introduction to Statistical Learning : with Applications in R. New York :Springer, 2013.
