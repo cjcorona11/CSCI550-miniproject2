@@ -121,11 +121,7 @@ md.pattern(data, rotate.names=TRUE)
 m1 <- lm(price~Year.Built, data=data)
 summary(m1)
 
-# 10-fold cross validation
-library(caret)
-train_control <- trainControl(method="cv", number=10)
-model <- train(price~Year.Built, data=data, trControl=train_control, method="lm")
-print(model)
+# I still need to work on this...
 ```
 
 ##############################################################################
