@@ -17,30 +17,22 @@ Our analysis of the telecom customer data set achieved great results. We are abl
 # 2 Data Preprocessing
 The data set is from a telephone service provider that tracked 20 metrics - 5 categorical and 15 quantitative - to try to predict whether or not the customer would churn. There are 3333 observations in this unbalanced data set with 2850 `FALSE`  responses and 483 `TRUE` responses. As a preprocessing step, we split our data into train and test sets. We split at 70\% to 30\% so there are 2324 training and 1009 testing observations. Of the training observations, there are 1982 `FALSE` responses and 342 `TRUE` responses.  Of the testing observations, there are 868 `FALSE` responses and 141 `TRUE` responses. This seems like reasonable unbalance compared to the original data set.
 
-```{r Train Test Split, warning=FALSE, message=FALSE}
-# read in the data set
-library(tidyverse)
-data <- read_csv("ames.csv")
-
-# split data into train and test sets
-set.seed(5544)
-split_index <- sample(c(TRUE,FALSE), nrow(data), replace=TRUE, prob=c(0.7, 0.3))
-train <- data[split_index,]
-test <- data[!split_index,]
-```
-
 # 3 Exploratory Analysis
 In our Exploratory Data Analysis (EDA) we rigorously reviewed the data for any issues and reduced the number of predictors from 20 down to just 9. We first checked for any missing data; there is none. Then we checked the balance of the data set; it is very unbalanced with 2850 `FALSE` responses and 483 `TRUE` responses. We looked at the summary statistics to find any outliers; it appears that there are no extreme observations. The next task was to attempt to reduce the number of predictors by dropping any that are uncorrelated with the response or are strongly correlated with another predictor. We discovered that the `total_x_minutes` is strongly correlated with `total_x_charge` so we could drop one of them. We then dropped all the predictors that are uncorrelated with the response: `phone_number`, `state`, `area_code`, `account_length`, and `x_calls`.
 
 ```{r EDA, message=FALSE, warning=FALSE}
+# read in the data set
+library(tidyverse)
+data <- read_csv("ames.csv")
+
 # take a peak at the data
-head(data)
+#head(data)
 
 # immediately drop order and pid as predictors
 data <- data[,-c(1,2)]
 
 # check structure of data
-str(data)
+#str(data)
 
 # change strings into factors
 data$MS.Zoning <- factor(data$MS.Zoning)
@@ -88,8 +80,8 @@ data$Sale.Type <- factor(data$Sale.Type)
 data$Sale.Condition <- factor(data$Sale.Condition)
 ```
 
-```{r}
-# check for missing data
+```{r Missing Data}
+# check for missing data - there is lots of missing data
 library(mice)
 md.pattern(data, rotate.names=TRUE)
 
@@ -106,10 +98,39 @@ data <- data[-c(1356,67,1794,2776,445,2820),]
 data[which(is.na(data$Mas.Vnr.Type)),25] <- "None"
 data[which(is.na(data$Mas.Vnr.Area)),26] <- 0
 
+# impute Garage values with most common response
+data$Garage.Cond[is.na(data$Garage.Cond)]<-factor('TA')
+data$Garage.Qual[is.na(data$Garage.Qual)]<-factor('TA')
+data$Garage.Finish[is.na(data$Garage.Finish)]<-factor('Unf')
+data$Garage.Yr.Blt[is.na(data$Garage.Yr.Blt)]<-2005
+data$Garage.Type[is.na(data$Garage.Type)]<-factor(unique(data$Garage.Type)[1])
+
+# impute Bsmt values with most common response
+data[which(is.na(data$Bsmt.Cond)),which(colnames(data)=="Bsmt.Cond")] = names(which.max(table(data$Bsmt.Cond)))
+data[which(is.na(data$Bsmt.Qual)),which(colnames(data)=="Bsmt.Qual")] = sample(c("Gd", "TA"), size = nrow(data[which(is.na(data$Bsmt.Qual)),which(colnames(data)=="Bsmt.Qual")]), replace = TRUE, prob = c(0.5, 0.5))
+data[which(is.na(data$Bsmt.Exposure)),which(colnames(data)=="Bsmt.Exposure")] = names(which.max(table(data$Bsmt.Exposure)))
+data[which(is.na(data$BsmtFin.Type.1)),which(colnames(data)=="BsmtFin.Type.1")] = sample(c("GLQ", "Unf"), size = nrow(data[which(is.na(data$BsmtFin.Type.1)),which(colnames(data)=="BsmtFin.Type.1")]), replace = TRUE, prob = c(0.5, 0.5))
+data[which(is.na(data$BsmtFin.Type.2)),which(colnames(data)=="BsmtFin.Type.2")] = names(which.max(table(data$BsmtFin.Type.2)))
+
+# now there is no missing data
 md.pattern(data, rotate.names=TRUE)
 ```
 
+```{r Cross Validation Example}
+# fit a simple linear regression model
+m1 <- lm(price~Year.Built, data=data)
+summary(m1)
 
+# 10-fold cross validation
+library(caret)
+train_control <- trainControl(method="cv", number=10)
+model <- train(price~Year.Built, data=data, trControl=train_control, method="lm")
+print(model)
+```
+
+##############################################################################
+The rest is leftover from miniproject 1
+##############################################################################
 ```{r}
 # check for balance - NOT BALANCED, FALSE=2850, TRUE=483
 library(ggplot2)
