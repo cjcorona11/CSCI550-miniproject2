@@ -179,7 +179,7 @@ rmse_best_ridge <- sqrt(min(cv_ridge$cvm))
 ```
 
 ## Principal Components Analysis
-For this data set, we carried out a Principal Components Analysis (PCA). PCA can only be performed on quantitative variables, of which there are 35 in the cleaned data set. We split the data set into a train and test set, then ran the `princomp` function on the 35 quantitative predictors and the response. From this function, we are able to get the PC loadings and scores from all 35 principle components. We built 35 regression models each using cumulative PC scores as predictors (ie model 1 uses PC1 only, model 2 uses PC1 and PC2, model 3 uses PC1, PC2, and PC3, etc). With each of these models, we predicted the price for the test set (after calculating the PC scores for the test set using the loadings). The RMSE was computed for each of these models. We repeated these steps on 10 folds for k-fold cross-validation. A plot of the cross-validated RMSE for each of the 35 models is shown in Figure. I would recommend 5 PCs because the slope of the RMSE drops off significantly after that. 5 PCs is the best balance of dimensionality reduction and improvement in RMSE. The minimum RMSE achieved was with 32 PCs, however we have only reduced the dimensionality by three predictors - hardly any improvement. The whole effort of PCA is to reduce dimensionality. If we choose not to reduce the dimensionality by very much, there is little point.
+For this data set, we carried out a Principal Components Analysis (PCA). PCA can only be performed on quantitative variables, of which there are 35 in the cleaned data set. We split the data set into a train and test set, then ran the `princomp` function on the 35 quantitative predictors and the response. From this function, we are able to get the PC loadings and scores from all 35 principle components. We built 35 regression models each using cumulative PC scores as predictors (ie model 1 uses PC1 only, model 2 uses PC1 and PC2, model 3 uses PC1, PC2, and PC3, etc). With each of these models, we predicted the price for the test set (after calculating the PC scores for the test set using the loadings). The RMSE was computed for each of these models. We repeated these steps on 10 folds for k-fold cross-validation. A plot of the cross-validated RMSE for each of the 35 models is shown in Figure. I would recommend 5 PCs because the slope of the RMSE drops off significantly after that. 5 PCs is the best balance of dimensionality reduction and improvement in RMSE. The minimum RMSE achieved was with 32 PCs, however we have only reduced the dimensionality by three predictors - hardly any improvement. The whole effort of PCA is to reduce dimensionality. If we choose not to reduce the dimensionality by very much, there is little point. Looking at the PCA loadings, we can determine (somewhat) which variables are the most important. We will only focus on the first 2 PCs since these two together explain the most variation (~14%). The first principal component puts the most emphasis on the overall quality, total area of the house, garage size, number of full bathrooms, year built/remodeled, basement and 1st floor square footage. These are all typical factors that home buyers value. The second principal component puts the most emphasis on the second floor square footage, number of bedrooms/rooms above ground, total area, number of half bathrooms, and kitchen size. Interestingly, there are also variables that weigh negatively on this second PC: variables dealing with basement size. So we can think of the 2nd PC as favoring houses without basements. Figure shows a biplot of the different variables and how they relate to the first two principal components. The first PC has many variables associated with it that are not at all associated with the 2nd PC and are therefore too hard to read. But we can clearly see the variables associated with the 2nd PC (and not with the 1st PC) such as X2nd.Flr.SF, Bedroom.AbvGr, and TotRms.AbvGrd.
 
 ```{r PCA}
 # first remove categorical data
@@ -480,10 +480,15 @@ plot(1:35, avg_rmse, type="l", main="PCA Cross Validation", xlab="number of PCs"
 ```
 Figure : Plot of 10-fold cross-validation of PCA regression.
 
+```{r Biplot}
+biplot(PCA, col=c("darkgrey","blue"), asp=1)
+```
+Figure : Biplot of first two principal components
+
 ## Simple Linear Model
 
 ## Polynomial
-We used the year the house was built as the only predictor to fit various polynomials to the data set. First we split the data set into a train and test set. On the training set, we built 5 models each with `Year.Built` and adding the next order polynomial of `Year.Built` to subsequent models up to 5th order (ie model 1 `price ~ Year.Built`, model 2 `price ~ Year.Built + Year.Built^2`, and so on). We used these models to predict on the test set and computed the RMSE. We repeated these steps on 10 folds and averaged the RMSE for k-fold cross-validation. I would recommend the 2nd order polynomial because the slope of the RMSE drops off significantly after that. There is minimal improvement in RMSE with higher order polynomials. Also with higher orders, there is the risk of overfitting to the training data. A plot of the cross-validated RMSE for each of the 5 models is shown in Figure. The 2nd order polynomial fit is shown in Figure.
+We used the year the house was built as the only predictor to fit various polynomials to the data set. First we split the data set into a train and test set. On the training set, we built 5 models each with `Year.Built` and adding the next order polynomial of `Year.Built` to subsequent models up to 5th order (ie model 1 `price ~ Year.Built`, model 2 `price ~ Year.Built + Year.Built^2`, and so on). We used these models to predict on the test set and computed the RMSE. We repeated these steps on 10 folds and averaged the RMSE for k-fold cross-validation. I would recommend the 2nd order polynomial because the slope of the RMSE drops off significantly after that. There is minimal improvement in RMSE with higher order polynomials. Also with higher orders, there is the risk of overfitting to the training data. A plot of the cross-validated RMSE for each of the 5 models is shown in Figure. The 1st-5th order polynomial fits are shown in Figure. The 1st order polynomial (linear) does not capture the curvature of the data. The 2nd order polynomial is able to capture this curvature well. Beyond the 2nd order there is not much difference, the lines are crowded together. Notice the 4th order polynomial appears to be missing - it is not, the 5th order polynomial predicts the exact same values and therefore plots perfectly on top, covering the 4th order.
 
 ```{r Polynomial, warning=F}
 # split data into train and test sets
@@ -545,15 +550,32 @@ plot(1:5, avg_rmse, type="l", main="Polynomial Cross Validation", xlab="order of
 ```
 Figure : Plot of 10-fold cross-validation of polynomial regression.
 
-```{r}
-plot(data$Year.Built, data$price, main="Price vs. Year Built Fit with 2nd Order Polynomial", xlab="Year Built", ylab="Price")
+```{r Poly Fit Plot, warning=F}
+plot(data$Year.Built, data$price, main="Price vs. Year Built fit with various order polynomials", xlab="Year Built", ylab="Price")
 x <- seq(1872, 2010, 1)
 xNew <- tibble(Year.Built = x, 
-               Year.Built2 = x^2)
-y <- predict(m2, newdata=xNew)
-lines(x, y, col="red")
+               Year.Built2 = x^2,
+               Year.Built3 = x^3,
+               Year.Built4 = x^4,
+               Year.Built5 = x^5)
+y1 <- predict(m1, newdata=xNew[,1])
+y2 <- predict(m2, newdata=xNew[,1:2])
+y3 <- predict(m3, newdata=xNew[,1:3])
+y4 <- predict(m4, newdata=xNew[,1:4])
+y5 <- predict(m5, newdata=xNew[,1:5])
+lines(x, y1, col="red")
+lines(x, y2, col="blue")
+lines(x, y3, col="green")
+lines(x, y4, col="magenta")
+lines(x, y5, col="orange")
+
+legend("topleft",
+       title="polynomial order",
+       legend=c("1", "2", "3", "4", "5"), 
+       col=c("red", "blue", "green", "magenta", "orange"),
+       pch=15)
 ```
-Figure : Plot of price vs year built, fit of 2nd order polynomial shown in red.
+Figure : Plot of price vs year built and fit of 1st-5th order polynomials.
 
 ## Spline
 ```{r Smoothing Spline}
