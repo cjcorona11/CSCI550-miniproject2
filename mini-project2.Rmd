@@ -121,61 +121,52 @@ data <- data[-c(which(data$area > 4000)),]
 ## Subset Selection
 
 ## Lasso and Ridge Regression
-Find theme in lasso coefficients - area, year built. Is there a theme in lasso coefficients that were dropped?
+Both Lasso and Ridge are shrinkage or regularization methods that estimates the coefficients of 'not-so-useful' predictors towards zero (ridge) or exactly zero (lasso) based on the shrinkage penalty factor, $\lambda$. In this project, we used the 10-fold Cross validation for model performance evaluation. However, we only used the numeric predictors. A plot of the cross-validated prediction RMSE for each value of $\lambda$ is shown in the Figures for both ridge and lasso. The best $\lambda$ for lasso was selected as 1151.4 and their corresponding RMSE was 36490.15, whereas the best $\lambda$ for ridge was selected as 3727.59 and their corresponding RMSE was 35716.38.
 
-Ridge keeps all coefficients. But which has better RMSE: best lasso or best ridge?
+Lasso had 9 non-zero coefficients. Most of them are related to the total area, year built or remodeled, quality of the house, room areas etc. The coefficients that were `dropped' were mostly related to basement, porch, garage and month or year sold. Ridge, by definition, has all non-zero coefficients, but some of them were very close to zero.
+
+In between the two methods, ridge had overall lowest prediction RMSE because it is essentially using more predictors or features, so it has a little bit better estimation than lasso. On the other hand, lasso is computationally and storage-wise much more efficient as it requires fewer number of predictors (reduces the dimension).
+
 ```{r lasso_ridge}
-
 # only keep numeric columns
 num_cols <- unlist(lapply(data, is.numeric))
 data_num <- data[ , num_cols]
-
 x <- data_num[ , -2]
 x <- as.matrix(x)
 y <- data_num[ , 2]
 y <- unlist(y)
-
 # lasso -> alpha = 1
 # ridge -> alpha = 0
-
 library(glmnet)
-
 # LASSO:::::::::::::::::::::::::::::
 lambdas_lasso = 10^seq(from = 2, to = 6, length.out = 50)
-
 cv_lasso = cv.glmnet(x, y, nfolds = 10, alpha = 1, lambda = lambdas_lasso, type.measure = c("mse"))
 plot(cv_lasso)
 title("lasso", line = -3)
-
 lambda_out_lasso = cv_lasso$lambda.min
-sprintf("Best Lambda for lasso: %s", round(lambda_out_lasso, digits = 2))
+rmse_best_lasso <- sqrt(min(cv_lasso$cvm))
+sprintf("Best Lambda for lasso: %s , corresponding RMSE: %s ", round(lambda_out_lasso, digits = 2),  round(rmse_best_lasso, digits = 2))
 
 co_lasso<-coef(cv_lasso,s = "lambda.1se")
 inds<-which(co_lasso!=0)
 variables_lasso<-row.names(co_lasso)[inds]
 variables_lasso<-variables_lasso[!(variables_lasso %in% '(Intercept)')];
-cat("Chosen lasso variables: \n")
-print(variables_lasso)
-
+#cat("Chosen lasso variables: \n")
+#print(variables_lasso)
 # RIDGE:::::::::::::::::::::::::::::
 lambdas_ridge = 10^seq(from = 1, to = 10, length.out = 50)
-
 cv_ridge = cv.glmnet(x, y, nfolds = 10, alpha = 0, lambda = lambdas_ridge, type.measure = c("mse"))
 plot(cv_ridge)
-
 title("ridge", line = -2)
 lambda_out_ridge = cv_ridge$lambda.min
-sprintf("Best Lambda for ridge: %s", round(lambda_out_ridge, digits = 2))
-
+rmse_best_ridge <- sqrt(min(cv_ridge$cvm))
+sprintf("Best Lambda for ridge: %s , corresponding RMSE: %s ", round(lambda_out_ridge, digits = 2),  round(rmse_best_ridge, digits = 2))
 co_ridge<-coef(cv_ridge,s = "lambda.1se")
 inds<-which(co_ridge!=0)
 variables_ridge<-row.names(co_ridge)[inds]
 variables_ridge<-variables_ridge[!(variables_ridge %in% '(Intercept)')];
-cat("Chosen ridge variables: \n")
-print(variables_ridge)
-
-rmse_best_lasso <- sqrt(min(cv_lasso$cvm))
-rmse_best_ridge <- sqrt(min(cv_ridge$cvm))
+#cat("Chosen ridge variables: \n")
+#print(variables_ridge)
 ```
 
 ## Principal Components Analysis
@@ -550,7 +541,7 @@ plot(1:5, avg_rmse, type="l", main="Polynomial Cross Validation", xlab="order of
 ```
 Figure : Plot of 10-fold cross-validation of polynomial regression.
 
-```{r Poly Fit Plot, warning=F}
+```{r Plot Poly Fit, warning=F}
 plot(data$Year.Built, data$price, main="Price vs. Year Built fit with various order polynomials", xlab="Year Built", ylab="Price")
 x <- seq(1872, 2010, 1)
 xNew <- tibble(Year.Built = x, 
@@ -577,34 +568,30 @@ legend("topleft",
 ```
 Figure : Plot of price vs year built and fit of 1st-5th order polynomials.
 
-## Spline
+## Smoothing Spline
+Splines are a type of interpolation or function estimation techniques. Based on a set of noisy observations, it fits the data into piece-wise polynomial curves called basis functions, in such a way that minimizes the total error between the observed data and the estimated data points. Similar to lasso and ridge regularization, the smoothing spline approach also has a tuning parameter $\lambda$ that helps penalize the variability in the basis function. $\lambda$ effectively controls the degree of freedom and hence the number of knots.  A larger value of $\lambda$ forces the function to be smoother, but at the cost of underfitting, whereas $\lambda\rightarrow0$ causes overfitting. Therefore, we tried 50 different values of $\lambda$ within a logarithmic range from $10^{-10}$ to $10^4$. 
+
+In this project, instead of leave-one-out cross-validation (LOOCV), we used the 10-fold Cross validation to be consistent with the other approaches. A plot of the cross-validated prediction RMSE for each value of $\lambda$ is shown in Figure . The lowest prediction RMSE was obtained corresponding to $\lambda = 5.18\times10^{-5}$. Figure shows the best fit smoothing spline of year built vs price. It seems that after 1940, the spline follows the trend of the scatter plot. But before that, the data are significantly sparse so there are some variations in the curve. Intuitively, the total number of houses were much less (or we have access to very small amount of data for the years before 1940), and there were some exceptionally high-priced houses during that time.
 ```{r Smoothing Spline}
 set.seed(125)
-
 # make dataframe with only year built
 newdata = data.frame(data$price)
 newdata = cbind(newdata, data$Year.Built)
 colnames(newdata) = c("price","Year.Built")
-
 # create partitions for CV
 n = nrow(newdata)
 nFolds = 10
 CVfolds = sample( rep( 1:nFolds , length=n ) , n )
 x = newdata$Year.Built
 y = newdata$price
-
 # initiate final RMSE matrices
 RMSE_train = matrix(0, 1,nFolds)
 RMSE_test = matrix(0, 1,nFolds)
-
 # define grid-search range for lambda
 lambdas = 10^seq(from = -10, to = 4, length.out = 50)
 lambdas = round(lambdas, digits = 10)
-print(lambdas)
-
 RMSE_array = matrix(0, 1, length(lambdas)) # create an array to store the prediction RMSE
 RMSE_array_index = 1
-
 for(l in lambdas) # l = value of lambda
 {
  
@@ -624,17 +611,21 @@ for(l in lambdas) # l = value of lambda
     pred = predict(smth_spl_mdl, xtest)
     RMSE_test[fold] = sqrt(mean(( ytest - pred$y )^2))
   }
-
   RMSE_array[RMSE_array_index] = mean(RMSE_test)
   RMSE_array_index = RMSE_array_index + 1
  
 }
-
 # plot RMSE_array w.r.t. lambda
-plot(lambdas, RMSE_array, xlab = expression(lambda) , ylab = " prediction RMSE (10-Fold CV)", log = 'x')
-smth_spl_mdl = smooth.spline(xtrain , ytrain, lambda = lambdas[which(RMSE_array==min(RMSE_array))])
-plot(smth_spl_mdl, type="l", col="red")
-points(xtrain, ytrain, col="black", alpha=0.5)
+plot(lambdas, RMSE_array, xlab = expression(lambda) , ylab = " prediction RMSE (10-Fold CV)", log = 'x', type="l")
+best_lambda_ss = lambdas[which(RMSE_array==min(RMSE_array))]
+print(best_lambda_ss)
+```
+
+```{r Plot Best Smooth Spline}
+# plot best smooth spline model
+best_smth_spl_mdl = smooth.spline(x , y, lambda = lambdas[which(RMSE_array==min(RMSE_array))])
+plot(xtrain, ytrain, col="black")
+lines(best_smth_spl_mdl, col="red",lwd=2)
 ```
 
 # 5 Conclusion
