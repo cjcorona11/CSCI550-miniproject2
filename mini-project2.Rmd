@@ -1,6 +1,6 @@
 ---
 title: "Mini Project 2: Predicting Housing Prices in Ames, Iowa"
-author: "Chris Corona, Farshina, Nolan Walker"
+author: "Chris Corona, Farshina Nazrul, Gak Roppongi, Nolan Walker"
 date: "`r Sys.Date()`"
 output: pdf_document
 ---
@@ -12,10 +12,12 @@ knitr::opts_chunk$set(echo = TRUE)
 In this mini-project, our task is to select predictors, fit, and evaluate several different types of models for regression. The data set is from the Ames Assessor's Office house in computing assessed values for individual residential properties sold in Ames, IA, from 2006 to 2010. This dataset has 2930 observations with 82 predictors (2930 * 82). 82 predictors include 23 nomial (categorical) variables, 23 ordinal variables, 14 discrete variables, and 20 continuous variables with two additional observation identifiers. We tried to predict the price of the residential properties based the predictors. After fitting various models, we compared the OOO to determine which model has the best performance.
 
 # 1 Summary
+This data set presented a challenging problem with so much missing data to clean and then so many variables to sort through. To deal with the 74 variables, we approached the task in several ways. First, we tried to reduce the variables through subset selection - choosing the most important variables one at a time in a step-wise fashion. This only achieved a minor reduction and left us with a somewhat confusing interpretation. The neighborhood, square footage of different parts of the house, condition, quality, roofing material, are all important when predicting price - not much of a reduction. Next we tried two different shrinkage methods, lasso and ridge regression. Ridge regression shrinks the coefficients towards zero, but not exactly zero so this actually does not perform any reduction on the variables. Lasso on the other hand shrinks many of the coefficients exactly to zero. The best lasso model left us with just 9 non-zero coefficients which were related to area of the house, year built/remodeled, and condition. This is a much more interpretable result. And finally, we tried Principal Component Analysis which allowed us to reduce the model down to just five variables, a huge reduction. However, PCA is known for even more confusing interpretations because the principal components are derivations from all the other variables. That being said, the first two PCs could be interpreted as relating to overall quality, area of the house, and year built/remodeled. After these analyses, we can say that the most important variables in predicting the price of a house in Ames, IA between the years of 1872-2010 are area, year built/remodeled, and overall quality.
 
+The final step in our analysis was using just one predictor, year built, to predict price using three different methods. Simple linear regression gives us simple results. The regression line does not capture the non-linearity of the data, and therefore is not a good model to predict price (particularly for very old or very new houses). Next, we tried polynomial regression which the 2nd order polynomial gave the best results. This makes sense because the curvature of the data most closely matches a parabola. And finally, we used smoothing spline to fit a model. The best smooth spline appears to greatly overfit the data as evidenced by how wiggly and flexible the fit is. In the end, the best model is the one that does the best job at fitting to the underlying truth of the data. The challenge is to not underfit or overfit to the data. This is more of an art than a science.
 
 # 2 Data Preprocessing
-The data set is from the Ames Assessor's Office house in computing assessed values for individual residential properties sold in Ames, IA, from 2006 to 2010. There are 2930 observations. The prices were between \$12,789 and \$755,000 with the mean value of \$180,796.0600682594, the median value of \$160,000, and the standard deviation of 79886.692356665. We removed “Pool quality”, “Miscellaneous Feature”, “Alley”, “Fence”, “Fireplace quality”, and “Lot Frontage” features were removed because most of the values in these columns were missed. We filled the missing value with the most common response for “Masonry veneer type”, “Garage Condition”, “Garage Quality”, “Garage Finish”, “Garage Year Built”, “Garage Type”, “Basement Condition”, “Basement Quality”, “Basement Exposure”, “Basement Finish Type. 1”, and “Basement Finish Type. 2”. As a preprocessing step, we split out data into training and test sets. We performed 10 times cross validation. First 10% of the dataset was used as the test set and the other 90% was used as the training set for the first iteration, the second 10% was used as the test set and the other 90% was used as the training set for the second iteration, and we repeated this for 10 times to complete the 10 times cross validation. Since this is a regression dataset, the datasets were split according to the index.
+The data set is from the Ames Assessor's Office house in computing assessed values for individual residential properties sold in Ames, IA, from 2006 to 2010. There are 2930 observations. The prices were between \$12,789 and \$755,000 with the mean value of \$180,796.0600682594, the median value of \$160,000, and the standard deviation of 79886.692356665. “Pool quality”, “Miscellaneous Feature”, “Alley”, “Fence”, “Fireplace quality”, and “Lot Frontage” features were removed because most of the values in these columns were missed. We filled the missing value with the most common response for “Masonry veneer type”, “Garage Condition”, “Garage Quality”, “Garage Finish”, “Garage Year Built”, “Garage Type”, “Basement Condition”, “Basement Quality”, “Basement Exposure”, “Basement Finish Type. 1”, and “Basement Finish Type. 2”. As a preprocessing step, we split out data into training and test sets. We performed 10 times cross validation. First 10% of the dataset was used as the test set and the other 90% was used as the training set for the first iteration, the second 10% was used as the test set and the other 90% was used as the training set for the second iteration, and we repeated this for 10 times to complete the 10 times cross validation. Since this is a regression dataset, the datasets were split according to the index.
 
 # 3 Exploratory Analysis
 In our Explanatory Data Analysis (EDA), we rigorously reviewed the data for any issues and reduced the number of predictors from 80 to 74. We first checked for any missing data. 6 features were removed because most of the values were missed in these columns. Missing values in 11 features were replaced with the most common response in each of the feature. We followed the instruction from the data description and removed the observations with the area more than 4000 squared feet. Next, we analyzed the variable correlation. The highest correlation between a variable and the response variable was between area and price at ~0.8. Then, we performed the forward and backward selection. However,
@@ -119,6 +121,71 @@ data <- data[-c(which(data$area > 4000)),]
 
 # 4 Model development and performance evaluation
 ## Subset Selection
+Best Subset and step-wise selection are two model selection methods that reduce the number of terms in a model, by comparing AICs of models with different number of terms. Best subset compares all models with 1 to N number of terms, where N is the total number of variables in the data set, against each other and returns the best model for each value of n. This approach is computationally impractical for data sets where there are a large number of features, as it scales exponentially with the number of features. Step-wise selection is a model selection approach that instead takes into account the performance of the model at each step after adding or removing a term from the model, for forward or backward selection respectively. It returns the model with terms that only increased the performance at the addition or removal at each step of a term, that stopped when performance started to decrease relative to the last best performing model.  
+
+```{r Cross Validation Example,eval=FALSE}
+# fit a simple linear regression model
+library(caret)
+m1 <- lm(price~., data=data) # full model
+train_control <- trainControl(method = "cv",
+                              number = 10)
+model<-train(price ~ .,data=data,method='lm',trControl=train_control) # full model trained using cross validation
+print(model)
+reduced.m1<-step(m1,direction = "backward",trace=0) # backward selection
+s1<-summary(reduced.m1)
+m1.model<- as.formula(paste0('price ~ ',paste(attr(s1$terms, "term.labels"), collapse=" + ")))
+model.1 <- train(m1.model, data = data, 
+               method = "lm",
+               trControl = train_control)
+print(model.1) # backward selected model trained with cross validation
+reduced.m2<-step(m1,direction ='forward',trace = 0) # forward selection
+s2<-summary(reduced.m2)
+m2.model<- as.formula(paste0('price ~ ',paste(attr(s2$terms, "term.labels"), collapse=" + ")))
+model.2 <- train(m2.model, data = data, 
+               method = "lm",
+               trControl = train_control)
+print(model.2)
+```
+
+```{r,eval=FALSE, warning=F}
+library(caret)
+library(mltools)
+library(data.table)
+
+newdata <- one_hot(as.data.table(data)) # one hot encode all of the categorical variables
+m1.onehot <- lm(price~., data=newdata) # full model
+model.onehot.full<-train(price ~ .,data=newdata,method='lm',trControl=train_control) # cross validation training
+print(model.onehot.full)
+reduced.m1.onehot<-step(m1.onehot,direction = "backward",trace=0) # backward selection
+s1.onehot<-summary(reduced.m1.onehot)
+m1.onehot.model<- as.formula(paste0('price ~ ',paste(attr(s1.onehot$terms, "term.labels"), collapse=" + ")))
+model.onehot.1 <- train(m1.onehot.model, data = newdata, 
+               method = "lm",
+               trControl = train_control)
+print(model.onehot.1)
+```
+
+```{r, warning=F}
+library(caret)
+load("reducedModels")
+load("reducedModelCV")
+#print(model.1) # this is the trained model using 10 fold cv from backward selection
+#print(model.onehot.1) # this is the trained model using 10 fold cv from backward selection on one hot encoded data
+m1 <- lm(price~., data=data)
+train_control <- trainControl(method = "cv",
+                              number = 10)
+model<-train(price ~ .,data=data,method='lm',trControl=train_control)
+#print(model) # this is just the trained model using cross validation without one hot encoding or backward selection
+```
+```{r }
+load("reducedOnehotSummary")
+idx <- order(coef(s1.onehot)[,4])  # sort out the p-values
+out <- coef(s1.onehot)[idx,]
+print(out[out[,4]<.05,c(1,4)]) # coefficients from model sorted by p vals
+```
+Table 1: List of coefficients and p-values from best model using backward selection and one-hot encoding
+
+A Simple linear model was fit to the data using all of the variables and backwards selection was performed, performance was evaluated using cross validation. The model obtained using backwards selection had a lower RMSE and used 53 of the 72 variables in the data(RMSE 34524 vs 35120). However the model still had 172 terms, since some of the variables were categorical with multiple levels each getting their own term in the model. To try to reduce the number of terms, the categorical variables were one hot encoded, and backwards selection was performed on the full model with all of the one hot encoded variables, this resulted in a model with fewer terms, 123, and the lowest RMSE of any model tested(RMSE=26755 vs 35120). There were over 40 terms in the reduced model with p-values below .001, most with very large coefficients, so the best model is one that with a lot of terms. Some of the most significant terms were, in order, clay tile roofing(categorical), area, stone brook neighborhood(categorical), Overall quality, Finished Basement Square Foot, Value of miscellaneous features, single family building type(categorical), Excellent Kitchen Quality(categorical), and so on. While many of the terms describe similar features, the types of terms that increase value are the ones for total area and quality of each floor/room/area, the location within and which neighborhood the house is in, having various features like a pool, a fireplace, a finished basement/garage, the Year built/remodeled/additions added and the type/size of area outside the house. Interestingly, almost all of the coefficients for terms that describe roofing material are negative. 
 
 ## Lasso and Ridge Regression
 Both Lasso and Ridge are shrinkage or regularization methods that estimates the coefficients of 'not-so-useful' predictors towards zero (ridge) or exactly zero (lasso) based on the shrinkage penalty factor, $\lambda$. In this project, we used the 10-fold Cross validation for model performance evaluation. However, we only used the numeric predictors. A plot of the cross-validated prediction RMSE for each value of $\lambda$ is shown in the Figures for both ridge and lasso. The best $\lambda$ for lasso was selected as 1151.4 and their corresponding RMSE was 36490.15, whereas the best $\lambda$ for ridge was selected as 3727.59 and their corresponding RMSE was 35716.38.
@@ -127,7 +194,7 @@ Lasso had 9 non-zero coefficients. Most of them are related to the total area, y
 
 In between the two methods, ridge had overall lowest prediction RMSE because it is essentially using more predictors or features, so it has a little bit better estimation than lasso. On the other hand, lasso is computationally and storage-wise much more efficient as it requires fewer number of predictors (reduces the dimension).
 
-```{r lasso_ridge}
+```{r Lasso Ridge}
 # only keep numeric columns
 num_cols <- unlist(lapply(data, is.numeric))
 data_num <- data[ , num_cols]
@@ -145,7 +212,7 @@ plot(cv_lasso)
 title("lasso", line = -3)
 lambda_out_lasso = cv_lasso$lambda.min
 rmse_best_lasso <- sqrt(min(cv_lasso$cvm))
-sprintf("Best Lambda for lasso: %s , corresponding RMSE: %s ", round(lambda_out_lasso, digits = 2),  round(rmse_best_lasso, digits = 2))
+#sprintf("Best Lambda for lasso: %s , corresponding RMSE: %s ", round(lambda_out_lasso, digits = 2),  round(rmse_best_lasso, digits = 2))
 
 co_lasso<-coef(cv_lasso,s = "lambda.1se")
 inds<-which(co_lasso!=0)
@@ -153,6 +220,10 @@ variables_lasso<-row.names(co_lasso)[inds]
 variables_lasso<-variables_lasso[!(variables_lasso %in% '(Intercept)')];
 #cat("Chosen lasso variables: \n")
 #print(variables_lasso)
+```
+Figure 1: Plot of RMSE across various lambda using lasso shrinkage method
+
+```{r}
 # RIDGE:::::::::::::::::::::::::::::
 lambdas_ridge = 10^seq(from = 1, to = 10, length.out = 50)
 cv_ridge = cv.glmnet(x, y, nfolds = 10, alpha = 0, lambda = lambdas_ridge, type.measure = c("mse"))
@@ -160,7 +231,7 @@ plot(cv_ridge)
 title("ridge", line = -2)
 lambda_out_ridge = cv_ridge$lambda.min
 rmse_best_ridge <- sqrt(min(cv_ridge$cvm))
-sprintf("Best Lambda for ridge: %s , corresponding RMSE: %s ", round(lambda_out_ridge, digits = 2),  round(rmse_best_ridge, digits = 2))
+#sprintf("Best Lambda for ridge: %s , corresponding RMSE: %s ", round(lambda_out_ridge, digits = 2),  round(rmse_best_ridge, digits = 2))
 co_ridge<-coef(cv_ridge,s = "lambda.1se")
 inds<-which(co_ridge!=0)
 variables_ridge<-row.names(co_ridge)[inds]
@@ -168,9 +239,10 @@ variables_ridge<-variables_ridge[!(variables_ridge %in% '(Intercept)')];
 #cat("Chosen ridge variables: \n")
 #print(variables_ridge)
 ```
+Figure 2: Plot of RMSE across various lambda using ridge regression shrinkage method
 
 ## Principal Components Analysis
-For this data set, we carried out a Principal Components Analysis (PCA). PCA can only be performed on quantitative variables, of which there are 35 in the cleaned data set. We split the data set into a train and test set, then ran the `princomp` function on the 35 quantitative predictors and the response. From this function, we are able to get the PC loadings and scores from all 35 principle components. We built 35 regression models each using cumulative PC scores as predictors (ie model 1 uses PC1 only, model 2 uses PC1 and PC2, model 3 uses PC1, PC2, and PC3, etc). With each of these models, we predicted the price for the test set (after calculating the PC scores for the test set using the loadings). The RMSE was computed for each of these models. We repeated these steps on 10 folds for k-fold cross-validation. A plot of the cross-validated RMSE for each of the 35 models is shown in Figure. I would recommend 5 PCs because the slope of the RMSE drops off significantly after that. 5 PCs is the best balance of dimensionality reduction and improvement in RMSE. The minimum RMSE achieved was with 32 PCs, however we have only reduced the dimensionality by three predictors - hardly any improvement. The whole effort of PCA is to reduce dimensionality. If we choose not to reduce the dimensionality by very much, there is little point. Looking at the PCA loadings, we can determine (somewhat) which variables are the most important. We will only focus on the first 2 PCs since these two together explain the most variation (~14%). The first principal component puts the most emphasis on the overall quality, total area of the house, garage size, number of full bathrooms, year built/remodeled, basement and 1st floor square footage. These are all typical factors that home buyers value. The second principal component puts the most emphasis on the second floor square footage, number of bedrooms/rooms above ground, total area, number of half bathrooms, and kitchen size. Interestingly, there are also variables that weigh negatively on this second PC: variables dealing with basement size. So we can think of the 2nd PC as favoring houses without basements. Figure shows a biplot of the different variables and how they relate to the first two principal components. The first PC has many variables associated with it that are not at all associated with the 2nd PC and are therefore too hard to read. But we can clearly see the variables associated with the 2nd PC (and not with the 1st PC) such as X2nd.Flr.SF, Bedroom.AbvGr, and TotRms.AbvGrd.
+For this data set, we carried out a Principal Components Analysis (PCA). PCA can only be performed on quantitative variables, of which there are 35 in the cleaned data set. We split the data set into a train and test set, then ran the `princomp` function on the 35 quantitative predictors and the response. From this function, we are able to get the PC loadings and scores from all 35 principle components. We built 35 regression models each using cumulative PC scores as predictors (ie model 1 uses PC1 only, model 2 uses PC1 and PC2, model 3 uses PC1, PC2, and PC3, etc). With each of these models, we predicted the price for the test set (after calculating the PC scores for the test set using the loadings). The RMSE was computed for each of these models. We repeated these steps on 10 folds for k-fold cross-validation. A plot of the cross-validated RMSE for each of the 35 models is shown in Figure 3. I would recommend 5 PCs because the slope of the RMSE drops off significantly after that. 5 PCs is the best balance of dimensionality reduction and improvement in RMSE. The minimum RMSE achieved was with 32 PCs, however we have only reduced the dimensionality by three predictors - hardly any improvement. The whole effort of PCA is to reduce dimensionality. If we choose not to reduce the dimensionality by very much, there is little point. Looking at the PCA loadings, we can determine (somewhat) which variables are the most important. We will only focus on the first 2 PCs since these two together explain the most variation (~14%). The first principal component puts the most emphasis on the overall quality, total area of the house, garage size, number of full bathrooms, year built/remodeled, basement and 1st floor square footage. These are all typical factors that home buyers value. The second principal component puts the most emphasis on the second floor square footage, number of bedrooms/rooms above ground, total area, number of half bathrooms, and kitchen size. Interestingly, there are also variables that weigh negatively on this second PC: variables dealing with basement size. So we can think of the 2nd PC as favoring houses without basements. Figure 4 shows a biplot of the different variables and how they relate to the first two principal components. The first PC has many variables associated with it that are not at all associated with the 2nd PC and are therefore too hard to read. But we can clearly see the variables associated with the 2nd PC (and not with the 1st PC) such as X2nd.Flr.SF, Bedroom.AbvGr, and TotRms.AbvGrd.
 
 ```{r PCA}
 # first remove categorical data
@@ -469,17 +541,41 @@ avg_rmse[35] <- rmse35/k
 # plot RMSE vs number of PCs
 plot(1:35, avg_rmse, type="l", main="PCA Cross Validation", xlab="number of PCs", ylab="Test RMSE")
 ```
-Figure : Plot of 10-fold cross-validation of PCA regression.
+Figure 3: Plot of 10-fold cross-validation of PCA regression.
 
 ```{r Biplot}
 biplot(PCA, col=c("darkgrey","blue"), asp=1)
 ```
-Figure : Biplot of first two principal components
+Figure 4: Biplot of first two principal components
 
 ## Simple Linear Model
+A linear model with only year built was fit against price. Ten fold cross validation was performed and as expected, the RMSE was a lot higher than for any of the other linear models fit with more predictors.  
+```{r, warning=F}
+library(Metrics)
+data<-data[sample(nrow(data)),]
+
+#Create 10 equally size folds
+folds <- cut(seq(1,nrow(data)),breaks=10,labels=FALSE)
+error<- 1:10
+#Perform 10 fold cross validation
+for(i in 1:10){
+    #Segement your data by fold using the which() function 
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- data[testIndexes, ]
+    trainData <- data[-testIndexes, ]
+    simple.model<-lm(price~Year.Built,data=trainData)
+    predicted.price<-predict(simple.model,testData)
+    error[i]<-rmse(predicted.price,testData$price)
+}
+#print(mean(error))
+plot(testData$Year.Built,testData$price, xlab="Year Built", ylab="Price")
+lines(testData$Year.Built,predicted.price,col="red")
+legend("topleft",legend=c("linear model prediction","test data"),col=c("red","black"),pch=c('_','o'))
+```
+Figure 5: Plot of simple linear regression `price ~ year built`
 
 ## Polynomial
-We used the year the house was built as the only predictor to fit various polynomials to the data set. First we split the data set into a train and test set. On the training set, we built 5 models each with `Year.Built` and adding the next order polynomial of `Year.Built` to subsequent models up to 5th order (ie model 1 `price ~ Year.Built`, model 2 `price ~ Year.Built + Year.Built^2`, and so on). We used these models to predict on the test set and computed the RMSE. We repeated these steps on 10 folds and averaged the RMSE for k-fold cross-validation. I would recommend the 2nd order polynomial because the slope of the RMSE drops off significantly after that. There is minimal improvement in RMSE with higher order polynomials. Also with higher orders, there is the risk of overfitting to the training data. A plot of the cross-validated RMSE for each of the 5 models is shown in Figure. The 1st-5th order polynomial fits are shown in Figure. The 1st order polynomial (linear) does not capture the curvature of the data. The 2nd order polynomial is able to capture this curvature well. Beyond the 2nd order there is not much difference, the lines are crowded together. Notice the 4th order polynomial appears to be missing - it is not, the 5th order polynomial predicts the exact same values and therefore plots perfectly on top, covering the 4th order.
+We used the year the house was built as the only predictor to fit various polynomials to the data set. First we split the data set into a train and test set. On the training set, we built 5 models each with `Year.Built` and adding the next order polynomial of `Year.Built` to subsequent models up to 5th order (ie model 1 `price ~ Year.Built`, model 2 `price ~ Year.Built + Year.Built^2`, and so on). We used these models to predict on the test set and computed the RMSE. We repeated these steps on 10 folds and averaged the RMSE for k-fold cross-validation. I would recommend the 2nd order polynomial because the slope of the RMSE drops off significantly after that. There is minimal improvement in RMSE with higher order polynomials. Also with higher orders, there is the risk of overfitting to the training data. A plot of the cross-validated RMSE for each of the 5 models is shown in Figure 6. The 1st-5th order polynomial fits are shown in Figure 7. The 1st order polynomial (linear) does not capture the curvature of the data. The 2nd order polynomial is able to capture this curvature well. Beyond the 2nd order there is not much difference, the lines are crowded together. Notice the 4th order polynomial appears to be missing - it is not, the 5th order polynomial predicts the exact same values and therefore plots perfectly on top, covering the 4th order.
 
 ```{r Polynomial, warning=F}
 # split data into train and test sets
@@ -539,7 +635,7 @@ avg_rmse[5] <- sum(rmse5)/k
 # plot RMSE vs number of PCs
 plot(1:5, avg_rmse, type="l", main="Polynomial Cross Validation", xlab="order of polynomial", ylab="Test RMSE")
 ```
-Figure : Plot of 10-fold cross-validation of polynomial regression.
+Figure 6: Plot of 10-fold cross-validation of polynomial regression
 
 ```{r Plot Poly Fit, warning=F}
 plot(data$Year.Built, data$price, main="Price vs. Year Built fit with various order polynomials", xlab="Year Built", ylab="Price")
@@ -566,7 +662,7 @@ legend("topleft",
        col=c("red", "blue", "green", "magenta", "orange"),
        pch=15)
 ```
-Figure : Plot of price vs year built and fit of 1st-5th order polynomials.
+Figure 7: Plot of price vs year built and fit of 1st-5th order polynomials
 
 ## Smoothing Spline
 Splines are a type of interpolation or function estimation techniques. Based on a set of noisy observations, it fits the data into piece-wise polynomial curves called basis functions, in such a way that minimizes the total error between the observed data and the estimated data points. Similar to lasso and ridge regularization, the smoothing spline approach also has a tuning parameter $\lambda$ that helps penalize the variability in the basis function. $\lambda$ effectively controls the degree of freedom and hence the number of knots.  A larger value of $\lambda$ forces the function to be smoother, but at the cost of underfitting, whereas $\lambda\rightarrow0$ causes overfitting. Therefore, we tried 50 different values of $\lambda$ within a logarithmic range from $10^{-10}$ to $10^4$. 
@@ -618,8 +714,9 @@ for(l in lambdas) # l = value of lambda
 # plot RMSE_array w.r.t. lambda
 plot(lambdas, RMSE_array, xlab = expression(lambda) , ylab = " prediction RMSE (10-Fold CV)", log = 'x', type="l")
 best_lambda_ss = lambdas[which(RMSE_array==min(RMSE_array))]
-print(best_lambda_ss)
+#print(best_lambda_ss)
 ```
+Figure 8: Plot of 10-fold cross-validation of smoothing spline
 
 ```{r Plot Best Smooth Spline}
 # plot best smooth spline model
@@ -627,9 +724,7 @@ best_smth_spl_mdl = smooth.spline(x , y, lambda = lambdas[which(RMSE_array==min(
 plot(xtrain, ytrain, col="black")
 lines(best_smth_spl_mdl, col="red",lwd=2)
 ```
-
-# 5 Conclusion
-
+Figure 9: Plot of best smoothing spline model
 
 # References
 Gareth James, Daniela Witten, Trevor Hastie, Robert Tibshirani. An Introduction to Statistical Learning : with Applications in R. New York :Springer, 2013.
